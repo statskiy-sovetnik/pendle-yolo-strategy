@@ -1,0 +1,7 @@
+{
+  "name": "pendle_yolo_strategy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Epsilon Delta <ivangladkikh4@gmail.com>",
+  "license": "MIT"
+}
