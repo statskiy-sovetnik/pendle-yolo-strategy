@@ -4,3 +4,6 @@
 [submodule "lib/pendle-examples-public"]
 	path = lib/pendle-examples-public
 	url = https://github.com/pendle-finance/pendle-examples-public
+[submodule "lib/pendle-core-v2-public"]
+	path = lib/pendle-core-v2-public
+	url = https://github.com/pendle-finance/pendle-core-v2-public
