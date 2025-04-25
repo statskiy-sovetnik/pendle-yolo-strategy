@@ -1,66 +1,66 @@
-## Foundry
+# Pendle YOLO Strategy
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A yield optimization strategy for Pendle Finance markets that dynamically positions between PT (Principal Token), YT (Yield Token), and LP (Liquidity Provider) based on market conditions.
 
-Foundry consists of:
+## Stage 1 Implementation
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+The first stage of the project implements the basic YOLO strategy functionality:
 
-## Documentation
+1. Strategy determines the optimal position based on yield comparisons
+2. Automatic position entry/exit based on yield calculations
+3. Support for multiple Pendle markets
 
-https://book.getfoundry.sh/
+### How the Strategy Works
 
-## Usage
+The strategy compares three types of yields for each market:
+- **Fixed Yield** (from PTs) - determined by PT price discount and time to maturity
+- **Implied Yield** (from YTs) - the implied APY from yield tokens
+- **Underlying APY** (via LPs) - market yield available via liquidity providing
 
-### Build
+Based on which yield is highest, the strategy will position in:
+- PT if Fixed Yield > Implied Yield AND Fixed Yield > Underlying APY
+- YT if Implied Yield > Fixed Yield AND Implied Yield > Underlying APY
+- LP otherwise
 
-```shell
-$ forge build
+### Key Components
+
+- `PendleYoloStrategy`: Main strategy implementation
+- `pendleApi.ts`: API client for interacting with Pendle markets
+- `config/index.ts`: Configuration for markets and parameters
+
+### Setup
+
+1. Create a `.env` file with:
+```
+RPC_URL=<your_rpc_url>
+PRIVATE_KEY=<your_private_key>
 ```
 
-### Test
-
-```shell
-$ forge test
+2. Install dependencies:
+```
+yarn install
 ```
 
-### Format
-
-```shell
-$ forge fmt
+3. Build the project:
+```
+yarn build
 ```
 
-### Gas Snapshots
-
-```shell
-$ forge snapshot
+4. Run the strategy:
+```
+yarn start
 ```
 
-### Anvil
+## Configuration
 
-```shell
-$ anvil
-```
+The strategy is configured in `src/config/index.ts`. You can modify:
 
-### Deploy
+- Target markets
+- USD allocation per market
+- Chain ID
+- RPC provider
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+## Future Development
 
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+- Stage 2: Periodic rebalancing and strategy adjustment
+- Stage 3: Risk management and stop-loss implementation
