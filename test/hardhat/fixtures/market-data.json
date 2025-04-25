@@ -1,0 +1,37 @@
+{
+  "markets": {
+    "resolv": {
+      "ptPrice": 0.985,
+      "ytPrice": 0.015,
+      "lpPrice": 1.01,
+      "tvl": 1000000,
+      "fixedYield": 0.07,
+      "impliedYield": 0.05,
+      "underlyingApy": 0.04,
+      "daysToMaturity": 250,
+      "expired": false
+    },
+    "skaito": {
+      "ptPrice": 0.975,
+      "ytPrice": 0.025,
+      "lpPrice": 1.02,
+      "tvl": 2000000,
+      "fixedYield": 0.03,
+      "impliedYield": 0.04,
+      "underlyingApy": 0.05,
+      "daysToMaturity": 200,
+      "expired": false
+    },
+    "susdz": {
+      "ptPrice": 0.98,
+      "ytPrice": 0.02,
+      "lpPrice": 1.015,
+      "tvl": 1500000,
+      "fixedYield": 0.05,
+      "impliedYield": 0.06,
+      "underlyingApy": 0.05,
+      "daysToMaturity": 250,
+      "expired": false
+    }
+  }
+}

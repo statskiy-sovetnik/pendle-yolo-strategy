@@ -9,6 +9,8 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "jest",
+    "test:hardhat": "npx hardhat test",
+    "test:fork": "npx hardhat test --network hardhat",
     "lint": "eslint src/**/*.ts"
   },
   "dependencies": {
@@ -27,6 +29,7 @@
     "@types/node-cron": "^3.0.11",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",
+    "chai": "^4.3.10",
     "eslint": "^8.54.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1",
