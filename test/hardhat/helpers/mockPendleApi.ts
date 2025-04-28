@@ -1,4 +1,3 @@
-import { BigNumber } from "ethers";
 import marketData from "../fixtures/market-data.json";
 import { SwapData, LiquidityData } from "../../../src/utils/types";
 
@@ -102,7 +101,7 @@ export class MockPendleApi {
     receiverAddress: string,
     tokenIn: string,
     tokenOut: string,
-    amountIn: BigNumber,
+    amountIn: bigint,
     slippage: number = 0.5
   ): Promise<SwapData> {
     // Use market data to calculate tokenOut amount
@@ -110,11 +109,11 @@ export class MockPendleApi {
     const tokenOutPrice = await this.getTokenPrice(chainId, tokenOut);
     
     // Calculate token out amount based on price ratio
-    const amountInValue = amountIn.mul(BigNumber.from(Math.floor(tokenInPrice * 1e6))).div(1e6);
-    const amountOut = amountInValue.mul(BigNumber.from(1e6)).div(BigNumber.from(Math.floor(tokenOutPrice * 1e6)));
+    const amountInValue = amountIn * BigInt(Math.floor(tokenInPrice * 1e6)) / BigInt(1e6);
+    const amountOut = amountInValue * BigInt(1e6) / BigInt(Math.floor(tokenOutPrice * 1e6));
     
     // Apply slippage
-    const minAmountOut = amountOut.mul(BigNumber.from(10000 - Math.floor(slippage * 100))).div(10000);
+    const minAmountOut = amountOut * BigInt(10000 - Math.floor(slippage * 100)) / BigInt(10000);
     
     return {
       callData: "0x", // Mock calldata
@@ -136,7 +135,7 @@ export class MockPendleApi {
     marketAddress: string,
     receiverAddress: string,
     tokenIn: string,
-    amountIn: BigNumber,
+    amountIn: bigint,
     slippage: number = 0.5
   ): Promise<LiquidityData> {
     // Use market data to calculate LP token amount
@@ -144,11 +143,11 @@ export class MockPendleApi {
     const lpTokenPrice = await this.getTokenPrice(chainId, marketAddress);
     
     // Calculate LP token amount based on price ratio
-    const amountInValue = amountIn.mul(BigNumber.from(Math.floor(tokenInPrice * 1e6))).div(1e6);
-    const lpAmount = amountInValue.mul(BigNumber.from(1e6)).div(BigNumber.from(Math.floor(lpTokenPrice * 1e6)));
+    const amountInValue = amountIn * BigInt(Math.floor(tokenInPrice * 1e6)) / BigInt(1e6);
+    const lpAmount = amountInValue * BigInt(1e6) / BigInt(Math.floor(lpTokenPrice * 1e6));
     
     // Apply slippage
-    const minLpOut = lpAmount.mul(BigNumber.from(10000 - Math.floor(slippage * 100))).div(10000);
+    const minLpOut = lpAmount * BigInt(10000 - Math.floor(slippage * 100)) / BigInt(10000);
     
     return {
       callData: "0x", // Mock calldata
@@ -169,7 +168,7 @@ export class MockPendleApi {
     chainId: number,
     marketAddress: string,
     receiverAddress: string,
-    lpAmount: BigNumber,
+    lpAmount: bigint,
     tokenOut: string,
     slippage: number = 0.5
   ): Promise<LiquidityData> {
@@ -178,11 +177,11 @@ export class MockPendleApi {
     const tokenOutPrice = await this.getTokenPrice(chainId, tokenOut);
     
     // Calculate token out amount based on price ratio
-    const lpValue = lpAmount.mul(BigNumber.from(Math.floor(lpTokenPrice * 1e6))).div(1e6);
-    const tokenOutAmount = lpValue.mul(BigNumber.from(1e6)).div(BigNumber.from(Math.floor(tokenOutPrice * 1e6)));
+    const lpValue = lpAmount * BigInt(Math.floor(lpTokenPrice * 1e6)) / BigInt(1e6);
+    const tokenOutAmount = lpValue * BigInt(1e6) / BigInt(Math.floor(tokenOutPrice * 1e6));
     
     // Apply slippage
-    const minTokenOut = tokenOutAmount.mul(BigNumber.from(10000 - Math.floor(slippage * 100))).div(10000);
+    const minTokenOut = tokenOutAmount * BigInt(10000 - Math.floor(slippage * 100)) / BigInt(10000);
     
     return {
       callData: "0x", // Mock calldata

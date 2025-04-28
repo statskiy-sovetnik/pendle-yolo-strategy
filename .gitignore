@@ -1,6 +1,8 @@
 .vscode/
 .wake/
 CLAUDE.md
+dist/
+cache_hardhat/
 
 # Compiler files
 cache/

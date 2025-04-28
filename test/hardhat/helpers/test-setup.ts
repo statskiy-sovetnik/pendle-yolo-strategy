@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { BigNumber, Signer } from "ethers";
+import { Signer } from "ethers";
 import { StrategyMode } from "../../../src/utils/types";
 
 // USDC address on Base
@@ -22,10 +22,10 @@ export async function mockTransactionExecution(
 }
 
 // Helper to parse transaction result
-export function parseTransactionResult(result: any): BigNumber {
+export function parseTransactionResult(result: any): bigint {
   // In a real test, this would parse transaction receipt or return value
   // For our mocked test, we'll just return a mock value
-  return BigNumber.from("1000000000000000000"); // 1 token with 18 decimals
+  return BigInt("1000000000000000000"); // 1 token with 18 decimals
 }
 
 // Helper to determine optimal strategy mode based on market data
@@ -64,23 +64,23 @@ export function determineOptimalStrategy(
 // Helper to fund an address with USDC
 export async function fundWithUSDC(
   address: string,
-  amount: BigNumber
+  amount: bigint
 ): Promise<void> {
-  // Get a reference to the USDC contract
-  const usdc = await ethers.getContractAt(
-    ["function transfer(address to, uint256 amount) returns (bool)"],
-    USDC_ADDRESS
-  );
-  
   // Find a whale with sufficient USDC
   const usdcWhale = "0xda9360F80F7AcE88F14a504f4D950d0eE5A93db9"; // Replace with actual whale address for Base
   
   // Impersonate the whale
-  await ethers.getImpersonatedSigner(usdcWhale);
-  const whaleSigner = await ethers.getSigner(usdcWhale);
+  const whaleSigner = await ethers.getImpersonatedSigner(usdcWhale);
+  
+  // Get a reference to the USDC contract with the whale as signer
+  const usdc = await ethers.getContractAt(
+    "IERC20",
+    USDC_ADDRESS,
+    whaleSigner
+  );
   
   // Transfer USDC to the target address
-  await usdc.connect(whaleSigner).transfer(address, amount);
+  await usdc.transfer(address, amount);
   
   // Stop impersonating
   await ethers.provider.send("hardhat_stopImpersonatingAccount", [usdcWhale]);

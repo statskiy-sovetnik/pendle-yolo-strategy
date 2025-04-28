@@ -7,9 +7,9 @@ const defaultConfig = {
     provider: process.env.RPC_URL || "https://base-rpc.publicnode.com",
     privateKey: process.env.PRIVATE_KEY || "",
     usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
-    rebalanceThresholdDelta: 0.5, // 0.5%
-    rebalanceInterval: 4 * 60 * 60 * 1000, // 4 hours
-    stopLossThreshold: 50, // 50%
+    rebalanceThresholdDelta: parseFloat(process.env.REBALANCE_THRESHOLD_DELTA || "0.5"), // 0.5%
+    rebalanceInterval: parseInt(process.env.REBALANCE_INTERVAL_HOURS || "4") * 60 * 60 * 1000, // 4 hours
+    stopLossThreshold: parseFloat(process.env.STOP_LOSS_THRESHOLD || "50"), // 50%
     apiBaseUrl: "https://api-v2.pendle.finance/api/core",
     markets: [
         {

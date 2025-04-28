@@ -38,6 +38,15 @@ class PendleYoloStrategy {
         }));
     }
     /**
+     * Get configuration for testing
+     */
+    getConfig() {
+        return {
+            chainId: this.chainId,
+            markets: this.config.markets
+        };
+    }
+    /**
      * Initialize the strategy by fetching current market data
      */
     async initialize() {
@@ -100,15 +109,23 @@ class PendleYoloStrategy {
             // If market expired, only PT will work since it's redeemable at 1
             return types_1.StrategyMode.PT;
         }
-        // Compare yields
-        if (marketData.fixedYield > marketData.impliedYield &&
-            marketData.fixedYield > marketData.underlyingApy) {
+        // Calculate delta between different yields
+        const fixedToUnderlyingDelta = marketData.fixedYield - marketData.underlyingApy;
+        const underlyingToImpliedDelta = marketData.underlyingApy - marketData.impliedYield;
+        // Use threshold delta for determining if a position is significantly better
+        // Config has delta as percentage (0.5 = 0.5%), so convert to decimal
+        const thresholdDelta = this.config.rebalanceThresholdDelta / 100;
+        // PT is good when fixed yield is significantly better than underlying APY (shorting yield)
+        // This means we expect the actual yield to be lower than the fixed rate
+        if (fixedToUnderlyingDelta > thresholdDelta) {
             return types_1.StrategyMode.PT;
         }
-        else if (marketData.impliedYield > marketData.fixedYield &&
-            marketData.impliedYield > marketData.underlyingApy) {
+        // YT is good when underlying APY is significantly better than implied APY (longing yield)
+        // This means we expect the actual yield to be higher than what market expects
+        else if (underlyingToImpliedDelta > thresholdDelta) {
             return types_1.StrategyMode.YT;
         }
+        // When neither PT nor YT offers significantly better returns, go with LP
         else {
             return types_1.StrategyMode.LP;
         }
@@ -134,47 +151,11 @@ class PendleYoloStrategy {
             await this.enterPosition(marketIndex, optimalMode);
             return;
         }
-        // Check if we should switch positions based on yields and threshold
+        // If optimal mode is different from current mode, switch positions without considering threshold
         if (optimalMode !== market.currentMode) {
-            const { marketData } = market;
-            const thresholdDelta = this.config.rebalanceThresholdDelta / 100; // Convert percentage to decimal
-            // Get the current and optimal yields
-            let currentYield = 0;
-            let optimalYield = 0;
-            switch (market.currentMode) {
-                case types_1.StrategyMode.PT:
-                    currentYield = marketData.fixedYield;
-                    break;
-                case types_1.StrategyMode.YT:
-                    currentYield = marketData.impliedYield;
-                    break;
-                case types_1.StrategyMode.LP:
-                    currentYield = marketData.underlyingApy;
-                    break;
-            }
-            switch (optimalMode) {
-                case types_1.StrategyMode.PT:
-                    optimalYield = marketData.fixedYield;
-                    break;
-                case types_1.StrategyMode.YT:
-                    optimalYield = marketData.impliedYield;
-                    break;
-                case types_1.StrategyMode.LP:
-                    optimalYield = marketData.underlyingApy;
-                    break;
-            }
-            // Check if the yield difference exceeds the threshold
-            const yieldDifference = optimalYield - currentYield;
-            if (yieldDifference > thresholdDelta) {
-                console.log(`Switching from ${market.currentMode} to ${optimalMode}: ` +
-                    `Yield difference (${(yieldDifference * 100).toFixed(2)}%) exceeds threshold (${this.config.rebalanceThresholdDelta}%)`);
-                await this.exitPosition(marketIndex);
-                await this.enterPosition(marketIndex, optimalMode);
-            }
-            else {
-                console.log(`Maintaining ${market.currentMode} position despite ${optimalMode} being optimal: ` +
-                    `Yield difference (${(yieldDifference * 100).toFixed(2)}%) below threshold (${this.config.rebalanceThresholdDelta}%)`);
-            }
+            console.log(`Switching from ${market.currentMode} to ${optimalMode}`);
+            await this.exitPosition(marketIndex);
+            await this.enterPosition(marketIndex, optimalMode);
         }
         else {
             console.log(`Maintaining ${market.currentMode} position (already optimal)`);
@@ -191,16 +172,18 @@ class PendleYoloStrategy {
         // Get the current USDC balance for this market
         // In a real implementation, you would have account management logic here
         // For now we'll simulate having the allocation amount in USDC
-        const usdcAmount = (0, helpers_1.parseBigNumber)(marketConfig.usdAllocation.toString());
+        const usdcAmount = (0, helpers_1.parseBigNumber)(marketConfig.usdAllocation.toString(), 6); // USDC has 6 decimals
         try {
             let position;
+            let txData;
             switch (mode) {
                 case types_1.StrategyMode.PT:
                     // Buy PT with USDC
-                    const ptSwapData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, marketConfig.underlyingAddress, marketConfig.ptAddress, usdcAmount);
+                    txData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, this.config.usdcAddress, // Use USDC as input for initial purchase
+                    marketConfig.ptAddress, usdcAmount);
                     position = {
                         mode: types_1.StrategyMode.PT,
-                        amount: ethers_1.BigNumber.from(ptSwapData.minTokenOut),
+                        amount: ethers_1.BigNumber.from(txData.minTokenOut),
                         tokenAddress: marketConfig.ptAddress,
                         initialUsdValue: marketConfig.usdAllocation,
                         currentUsdValue: marketConfig.usdAllocation
@@ -208,10 +191,11 @@ class PendleYoloStrategy {
                     break;
                 case types_1.StrategyMode.YT:
                     // Buy YT with USDC
-                    const ytSwapData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, marketConfig.underlyingAddress, marketConfig.ytAddress, usdcAmount);
+                    txData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, this.config.usdcAddress, // Use USDC as input for initial purchase
+                    marketConfig.ytAddress, usdcAmount);
                     position = {
                         mode: types_1.StrategyMode.YT,
-                        amount: ethers_1.BigNumber.from(ytSwapData.minTokenOut),
+                        amount: ethers_1.BigNumber.from(txData.minTokenOut),
                         tokenAddress: marketConfig.ytAddress,
                         initialUsdValue: marketConfig.usdAllocation,
                         currentUsdValue: marketConfig.usdAllocation
@@ -219,10 +203,11 @@ class PendleYoloStrategy {
                     break;
                 case types_1.StrategyMode.LP:
                     // Add liquidity with USDC
-                    const liquidityData = await (0, pendleApi_1.addLiquidity)(this.chainId, marketConfig.marketAddress, this.wallet.address, marketConfig.underlyingAddress, usdcAmount);
+                    txData = await (0, pendleApi_1.addLiquidity)(this.chainId, marketConfig.marketAddress, this.wallet.address, this.config.usdcAddress, // Use USDC as input for initial purchase
+                    usdcAmount);
                     position = {
                         mode: types_1.StrategyMode.LP,
-                        amount: ethers_1.BigNumber.from(liquidityData.minLpOut),
+                        amount: ethers_1.BigNumber.from(txData.minLpOut),
                         tokenAddress: marketConfig.marketAddress,
                         initialUsdValue: marketConfig.usdAllocation,
                         currentUsdValue: marketConfig.usdAllocation
@@ -231,17 +216,27 @@ class PendleYoloStrategy {
                 default:
                     throw new Error(`Invalid strategy mode: ${mode}`);
             }
+            // Execute the transaction
+            console.log(`Executing transaction for ${mode} position with ${(0, helpers_1.formatBigNumber)(usdcAmount, 6)} USDC`);
+            // First approve token spending if needed (for USDC)
+            const usdcContract = new ethers_1.ethers.Contract(this.config.usdcAddress, ["function approve(address spender, uint256 amount) returns (bool)"], this.wallet);
+            // Approve the router to spend our USDC
+            const approveTx = await usdcContract.approve(txData.router, usdcAmount);
+            await approveTx.wait();
+            console.log("Approved USDC spending");
+            // Execute the main transaction
+            const tx = await this.wallet.sendTransaction({
+                to: txData.target,
+                data: txData.callData,
+                value: txData.value ? ethers_1.BigNumber.from(txData.value) : ethers_1.BigNumber.from(0),
+                gasLimit: txData.gas ? ethers_1.BigNumber.from(txData.gas) : undefined
+            });
+            const receipt = await tx.wait();
+            console.log(`Transaction confirmed: ${receipt.transactionHash}`);
             // Update market state
             this.markets[marketIndex].position = position;
             this.markets[marketIndex].currentMode = mode;
             this.markets[marketIndex].initialUsdValue = marketConfig.usdAllocation;
-            console.log(`Entered ${mode} position with ${marketConfig.usdAllocation} USDC`);
-            // In a real implementation, you'd execute the transaction
-            // await this.wallet.sendTransaction({
-            //   to: position.targetAddress,
-            //   data: position.callData,
-            //   value: position.value ? BigNumber.from(position.value) : BigNumber.from(0)
-            // });
         }
         catch (error) {
             console.error(`Error entering ${mode} position:`, error);
@@ -256,29 +251,40 @@ class PendleYoloStrategy {
             return;
         const { marketConfig, position } = market;
         try {
+            let txData;
             switch (position.mode) {
                 case types_1.StrategyMode.PT:
                 case types_1.StrategyMode.YT:
                     // Swap PT/YT back to USDC
-                    const swapData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, position.tokenAddress, marketConfig.underlyingAddress, position.amount);
-                    console.log(`Exited ${position.mode} position, received ${swapData.minTokenOut} USDC`);
+                    txData = await (0, pendleApi_1.swapTokens)(this.chainId, marketConfig.marketAddress, this.wallet.address, position.tokenAddress, this.config.usdcAddress, // Swap back to USDC
+                    position.amount);
                     break;
                 case types_1.StrategyMode.LP:
                     // Remove liquidity to USDC
-                    const liquidityData = await (0, pendleApi_1.removeLiquidity)(this.chainId, marketConfig.marketAddress, this.wallet.address, position.amount, marketConfig.underlyingAddress);
-                    console.log(`Exited LP position, received ${liquidityData.minLpOut} USDC`);
+                    txData = await (0, pendleApi_1.removeLiquidity)(this.chainId, marketConfig.marketAddress, this.wallet.address, position.amount, this.config.usdcAddress // Swap back to USDC
+                    );
                     break;
                 default:
                     throw new Error(`Invalid strategy mode: ${position.mode}`);
             }
+            console.log(`Exiting ${position.mode} position`);
+            // First approve token spending if needed (for LP or PT/YT)
+            const tokenContract = new ethers_1.ethers.Contract(position.tokenAddress, ["function approve(address spender, uint256 amount) returns (bool)"], this.wallet);
+            // Approve the router to spend our tokens
+            const approveTx = await tokenContract.approve(txData.router, position.amount);
+            await approveTx.wait();
+            console.log(`Approved ${position.mode} token spending`);
+            // Execute the transaction
+            const tx = await this.wallet.sendTransaction({
+                to: txData.target,
+                data: txData.callData,
+                value: txData.value ? ethers_1.BigNumber.from(txData.value) : ethers_1.BigNumber.from(0),
+                gasLimit: txData.gas ? ethers_1.BigNumber.from(txData.gas) : undefined
+            });
+            const receipt = await tx.wait();
+            console.log(`Exit transaction confirmed: ${receipt.transactionHash}`);
             // Reset position
             this.markets[marketIndex].position = null;
-            // In a real implementation, you'd execute the transaction
-            // await this.wallet.sendTransaction({
-            //   to: txData.target,
-            //   data: txData.callData,
-            //   value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0)
-            // });
         }
         catch (error) {
             console.error(`Error exiting ${position.mode} position:`, error);

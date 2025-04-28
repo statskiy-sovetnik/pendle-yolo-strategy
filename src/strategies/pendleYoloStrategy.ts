@@ -50,6 +50,16 @@ export class PendleYoloStrategy {
   }
   
   /**
+   * Get configuration for testing
+   */
+  public getConfig() {
+    return {
+      chainId: this.chainId,
+      markets: this.config.markets
+    };
+  }
+  
+  /**
    * Initialize the strategy by fetching current market data
    */
   public async initialize(): Promise<void> {
@@ -200,26 +210,27 @@ export class PendleYoloStrategy {
     // Get the current USDC balance for this market
     // In a real implementation, you would have account management logic here
     // For now we'll simulate having the allocation amount in USDC
-    const usdcAmount = parseBigNumber(marketConfig.usdAllocation.toString());
+    const usdcAmount = parseBigNumber(marketConfig.usdAllocation.toString(), 6); // USDC has 6 decimals
     
     try {
       let position: Position;
+      let txData: any;
       
       switch (mode) {
         case StrategyMode.PT:
           // Buy PT with USDC
-          const ptSwapData = await swapTokens(
+          txData = await swapTokens(
             this.chainId,
             marketConfig.marketAddress,
             this.wallet.address,
-            marketConfig.underlyingAddress,
+            this.config.usdcAddress, // Use USDC as input for initial purchase
             marketConfig.ptAddress,
             usdcAmount
           );
           
           position = {
             mode: StrategyMode.PT,
-            amount: BigNumber.from(ptSwapData.minTokenOut),
+            amount: BigNumber.from(txData.minTokenOut),
             tokenAddress: marketConfig.ptAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -228,18 +239,18 @@ export class PendleYoloStrategy {
           
         case StrategyMode.YT:
           // Buy YT with USDC
-          const ytSwapData = await swapTokens(
+          txData = await swapTokens(
             this.chainId,
             marketConfig.marketAddress,
             this.wallet.address,
-            marketConfig.underlyingAddress,
+            this.config.usdcAddress, // Use USDC as input for initial purchase
             marketConfig.ytAddress,
             usdcAmount
           );
           
           position = {
             mode: StrategyMode.YT,
-            amount: BigNumber.from(ytSwapData.minTokenOut),
+            amount: BigNumber.from(txData.minTokenOut),
             tokenAddress: marketConfig.ytAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -248,17 +259,17 @@ export class PendleYoloStrategy {
           
         case StrategyMode.LP:
           // Add liquidity with USDC
-          const liquidityData = await addLiquidity(
+          txData = await addLiquidity(
             this.chainId,
             marketConfig.marketAddress,
             this.wallet.address,
-            marketConfig.underlyingAddress,
+            this.config.usdcAddress, // Use USDC as input for initial purchase
             usdcAmount
           );
           
           position = {
             mode: StrategyMode.LP,
-            amount: BigNumber.from(liquidityData.minLpOut),
+            amount: BigNumber.from(txData.minLpOut),
             tokenAddress: marketConfig.marketAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -269,18 +280,36 @@ export class PendleYoloStrategy {
           throw new Error(`Invalid strategy mode: ${mode}`);
       }
       
+      // Execute the transaction
+      console.log(`Executing transaction for ${mode} position with ${formatBigNumber(usdcAmount, 6)} USDC`);
+      
+      // First approve token spending if needed (for USDC)
+      const usdcContract = new ethers.Contract(
+        this.config.usdcAddress,
+        ["function approve(address spender, uint256 amount) returns (bool)"],
+        this.wallet
+      );
+      
+      // Approve the router to spend our USDC
+      const approveTx = await usdcContract.approve(txData.router, usdcAmount);
+      await approveTx.wait();
+      console.log("Approved USDC spending");
+      
+      // Execute the main transaction
+      const tx = await this.wallet.sendTransaction({
+        to: txData.target,
+        data: txData.callData,
+        value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0),
+        gasLimit: txData.gas ? BigNumber.from(txData.gas) : undefined
+      });
+      
+      const receipt = await tx.wait();
+      console.log(`Transaction confirmed: ${receipt.transactionHash}`);
+      
       // Update market state
       this.markets[marketIndex].position = position;
       this.markets[marketIndex].currentMode = mode;
       this.markets[marketIndex].initialUsdValue = marketConfig.usdAllocation;
-      console.log(`Entered ${mode} position with ${marketConfig.usdAllocation} USDC`);
-      
-      // In a real implementation, you'd execute the transaction
-      // await this.wallet.sendTransaction({
-      //   to: position.targetAddress,
-      //   data: position.callData,
-      //   value: position.value ? BigNumber.from(position.value) : BigNumber.from(0)
-      // });
       
     } catch (error) {
       console.error(`Error entering ${mode} position:`, error);
@@ -297,48 +326,64 @@ export class PendleYoloStrategy {
     const { marketConfig, position } = market;
     
     try {
+      let txData: any;
+      
       switch (position.mode) {
         case StrategyMode.PT:
         case StrategyMode.YT:
           // Swap PT/YT back to USDC
-          const swapData = await swapTokens(
+          txData = await swapTokens(
             this.chainId,
             marketConfig.marketAddress,
             this.wallet.address,
             position.tokenAddress,
-            marketConfig.underlyingAddress,
+            this.config.usdcAddress, // Swap back to USDC
             position.amount
           );
-          
-          console.log(`Exited ${position.mode} position, received ${swapData.minTokenOut} USDC`);
           break;
           
         case StrategyMode.LP:
           // Remove liquidity to USDC
-          const liquidityData = await removeLiquidity(
+          txData = await removeLiquidity(
             this.chainId,
             marketConfig.marketAddress,
             this.wallet.address,
             position.amount,
-            marketConfig.underlyingAddress
+            this.config.usdcAddress // Swap back to USDC
           );
-          
-          console.log(`Exited LP position, received ${liquidityData.minLpOut} USDC`);
           break;
           
         default:
           throw new Error(`Invalid strategy mode: ${position.mode}`);
       }
       
+      console.log(`Exiting ${position.mode} position`);
+      
+      // First approve token spending if needed (for LP or PT/YT)
+      const tokenContract = new ethers.Contract(
+        position.tokenAddress,
+        ["function approve(address spender, uint256 amount) returns (bool)"],
+        this.wallet
+      );
+      
+      // Approve the router to spend our tokens
+      const approveTx = await tokenContract.approve(txData.router, position.amount);
+      await approveTx.wait();
+      console.log(`Approved ${position.mode} token spending`);
+      
+      // Execute the transaction
+      const tx = await this.wallet.sendTransaction({
+        to: txData.target,
+        data: txData.callData,
+        value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0),
+        gasLimit: txData.gas ? BigNumber.from(txData.gas) : undefined
+      });
+      
+      const receipt = await tx.wait();
+      console.log(`Exit transaction confirmed: ${receipt.transactionHash}`);
+      
       // Reset position
       this.markets[marketIndex].position = null;
-      
-      // In a real implementation, you'd execute the transaction
-      // await this.wallet.sendTransaction({
-      //   to: txData.target,
-      //   data: txData.callData,
-      //   value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0)
-      // });
       
     } catch (error) {
       console.error(`Error exiting ${position.mode} position:`, error);
