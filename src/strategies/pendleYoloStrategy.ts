@@ -3,6 +3,7 @@ import { MarketState, StrategyMode, MarketData, Position } from "../utils/types"
 import { 
   getTokenPrices, 
   getMarketApyHistory, 
+  getMarketDataAtTimestamp,
   swapTokens, 
   addLiquidity, 
   removeLiquidity 
@@ -91,32 +92,72 @@ export class PendleYoloStrategy {
     for (const market of this.markets) {
       const { marketConfig } = market;
       
-      // Get APY history for this market to determine implied and underlying yields
-      const apyHistory = await getMarketApyHistory(
+      // Get comprehensive market data for this market at current timestamp
+      const currentTimestamp = new Date();
+      const marketDataResponse = await getMarketDataAtTimestamp(
         this.chainId,
-        marketConfig.marketAddress
+        marketConfig.marketAddress,
+        currentTimestamp
       );
       
       // Calculate days to maturity
       const daysToMaturity = calculateDaysToMaturity(marketConfig.maturityTimestamp);
       const expired = daysToMaturity <= 0;
       
-      // Update market data
-      market.marketData = {
-        timestamp: Math.floor(Date.now() / 1000),
-        ptPrice: tokenPrices[marketConfig.ptAddress.toLowerCase()] || 0,
-        ytPrice: tokenPrices[marketConfig.ytAddress.toLowerCase()] || 0,
-        lpPrice: tokenPrices[marketConfig.marketAddress.toLowerCase()] || 0,
-        tvl: 0, // Would need to fetch from API
-        fixedYield: calculateFixedYield(
-          tokenPrices[marketConfig.ptAddress.toLowerCase()] || 0,
-          daysToMaturity
-        ),
-        impliedYield: apyHistory.length > 0 ? apyHistory[0].impliedApy : 0,
-        underlyingApy: apyHistory.length > 0 ? apyHistory[0].underlyingApy : 0,
-        daysToMaturity,
-        expired
-      };
+      // If we got a valid response, use it to update market data
+      if (marketDataResponse) {
+        // Get timestamp from response or use current time
+        const timestamp = marketDataResponse.timestamp 
+          ? Math.floor(new Date(marketDataResponse.timestamp).getTime() / 1000) 
+          : Math.floor(Date.now() / 1000);
+        
+        // Extract PT discount to calculate fixed yield
+        const ptDiscount = marketDataResponse.ptDiscount || 0;
+        const ptPrice = 1 - ptDiscount;
+        
+        // Get LP price from token prices or use a default
+        const lpPrice = tokenPrices[marketConfig.marketAddress.toLowerCase()] || 0;
+        
+        // Update market data with values from the API response
+        market.marketData = {
+          timestamp,
+          ptPrice,
+          ytPrice: tokenPrices[marketConfig.ytAddress.toLowerCase()] || 0,
+          lpPrice,
+          tvl: marketDataResponse.liquidity?.usd || 0,
+          fixedYield: calculateFixedYield(ptPrice, daysToMaturity),
+          impliedYield: marketDataResponse.impliedApy || 0,
+          underlyingApy: marketDataResponse.underlyingApy || 0,
+          daysToMaturity,
+          expired
+        };
+      } else {
+        // Fallback to previous implementation if we couldn't get the comprehensive data
+        console.log(`Couldn't get comprehensive data for ${marketConfig.name}, falling back to basic data`);
+        
+        // Get APY history for this market to determine implied and underlying yields
+        const apyHistory = await getMarketApyHistory(
+          this.chainId,
+          marketConfig.marketAddress
+        );
+        
+        // Update market data with basic information
+        market.marketData = {
+          timestamp: Math.floor(Date.now() / 1000),
+          ptPrice: tokenPrices[marketConfig.ptAddress.toLowerCase()] || 0,
+          ytPrice: tokenPrices[marketConfig.ytAddress.toLowerCase()] || 0,
+          lpPrice: tokenPrices[marketConfig.marketAddress.toLowerCase()] || 0,
+          tvl: 0,
+          fixedYield: calculateFixedYield(
+            tokenPrices[marketConfig.ptAddress.toLowerCase()] || 0,
+            daysToMaturity
+          ),
+          impliedYield: apyHistory.length > 0 ? apyHistory[0].impliedApy : 0,
+          underlyingApy: apyHistory.length > 0 ? apyHistory[0].underlyingApy : 0,
+          daysToMaturity,
+          expired
+        };
+      }
       
       console.log(`Market ${marketConfig.name} data updated:`, {
         pt: market.marketData.ptPrice,

@@ -21,7 +21,7 @@ describe("PendleYoloStrategy", function() {
   let usdcContract: Contract;
   
   // Base chain addresses for tokens we need to test with
-  const USDC_WHALE = "0xda9360F80F7AcE88F14a504f4D950d0eE5A93db9";
+  const USDC_WHALE = "0x7C310a03f4CFa19F7f3d7F36DD3E05828629fa78";
 
   beforeAll(async function() {
     signers = await ethers.getSigners();
@@ -70,8 +70,8 @@ describe("PendleYoloStrategy", function() {
     // Create a config for testing on a forked Base network
     const mockConfig = {
       chainId: 8453, // Base chain
-      provider: "http://localhost:8545", // Use Hardhat's local URL
-      privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", // Hardhat test private key
+      provider: "http://localhost:8545", // @note Use Hardhat's local URL
+      privateKey: ethers.getSigners()[0].privateKey, // @note Hardhat test private key
       usdcAddress: USDC_ADDRESS,
       rebalanceThresholdDelta: 0.5, // 0.5%
       rebalanceInterval: 4 * 60 * 60 * 1000, // 4 hours

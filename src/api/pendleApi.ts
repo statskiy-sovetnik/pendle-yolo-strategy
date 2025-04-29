@@ -1,6 +1,7 @@
 import axios from "axios";
-import { LiquidityData, SwapData } from "../utils/types";
+import { AssetInfo, LiquidityData, MarketDataPoint, SwapData } from "../utils/types";
 import defaultConfig from "../config";
+import { parse } from "csv-string";
 
 const BASE_URL = defaultConfig.apiBaseUrl;
 
@@ -13,6 +14,19 @@ interface ApyHistoryItem {
   timestamp: number;
   underlyingApy: number;
   impliedApy: number;
+}
+
+interface HistoricalDataQuery {
+  timeFrame?: "hour" | "day" | "week";
+  timestampStart?: Date;
+  timestampEnd?: Date;
+}
+
+interface HistoricalDataResponse {
+  total: number;
+  timestamp_start: string;
+  timestamp_end: string;
+  results: string;
 }
 
 interface MarketInfo {
@@ -43,9 +57,9 @@ async function callSDK<T>(endpoint: string, data: any): Promise<T> {
 }
 
 // Helper function for regular API GET calls
-async function fetchAPI<T>(endpoint: string): Promise<T> {
+async function fetchAPI<T>(endpoint: string, params?: any): Promise<T> {
   try {
-    const response = await axios.get(`${BASE_URL}${endpoint}`);
+    const response = await axios.get(`${BASE_URL}${endpoint}`, params ? { params } : undefined);
     if (response.data && response.data.data) {
       return response.data.data as T;
     }
@@ -89,13 +103,97 @@ export async function getMarketList(chainId: number): Promise<MarketInfo[]> {
 
 export async function getMarketApyHistory(
   chainId: number,
-  marketAddress: string
+  marketAddress: string,
+  timestampStart?: Date,
+  timestampEnd?: Date,
+  timeFrame: "hour" | "day" | "week" = "day"
 ): Promise<ApyHistoryItem[]> {
   try {
-    return await fetchAPI<ApyHistoryItem[]>(`/v2/${chainId}/markets/${marketAddress}/apy-history`);
+    // If no timestamps provided, just return latest data (existing behavior)
+    if (!timestampStart && !timestampEnd) {
+      return await fetchAPI<ApyHistoryItem[]>(`/v2/${chainId}/markets/${marketAddress}/apy-history`);
+    }
+    
+    // Otherwise, prepare query params for historical data
+    const query: HistoricalDataQuery = {
+      timeFrame
+    };
+    
+    if (timestampStart) {
+      query.timestampStart = timestampStart;
+    }
+    
+    if (timestampEnd) {
+      query.timestampEnd = timestampEnd;
+    }
+    
+    // Fetch historical data
+    try {
+      const response = await axios.get<HistoricalDataResponse>(
+        `${BASE_URL}/v2/${chainId}/markets/${marketAddress}/apy-history`, 
+        { params: query }
+      );
+      
+      if (!response.data || !response.data.results) {
+        throw new Error("Invalid historical data response");
+      }
+      
+      // Parse CSV results into ApyHistoryItem objects
+      const csvData = parse(response.data.results, { output: 'objects' });
+      
+      // Transform into ApyHistoryItem format
+      return csvData.map((item: any) => ({
+        timestamp: Number(item.timestamp),
+        underlyingApy: Number(item.underlyingApy),
+        impliedApy: Number(item.impliedApy)
+      }));
+    } catch (error) {
+      console.error("Error fetching historical market APY data:", error);
+      return [];
+    }
   } catch (error) {
     console.error("Error fetching market APY history:", error);
     return [];
+  }
+}
+
+/**
+ * Get comprehensive market data at a specific timestamp
+ * @param chainId - Chain ID of the network
+ * @param marketAddress - Address of the market
+ * @param timestamp - Optional specific timestamp to get data for
+ * @returns Comprehensive market data including APYs, liquidity, rewards, etc.
+ */
+export async function getMarketDataAtTimestamp(
+  chainId: number,
+  marketAddress: string,
+  timestamp?: Date
+): Promise<MarketDataPoint | null> {
+  try {
+    // Prepare the query parameters
+    const params: any = {};
+    
+    // If timestamp is provided, convert to ISO string
+    if (timestamp) {
+      params.timestamp = timestamp.toISOString();
+    }
+    
+    // Make the API call
+    const response = await axios.get(
+      `${BASE_URL}/v2/${chainId}/markets/${marketAddress}/data`,
+      { params }
+    );
+    
+    // Check if we got valid data
+    if (response.data && response.data.data) {
+      return response.data.data as MarketDataPoint;
+    }
+    
+    // Handle error cases
+    throw new Error("Invalid market data response");
+  } catch (error) {
+    console.error(`Error fetching market data for ${marketAddress}:`, error);
+    return null;
   }
 }
 

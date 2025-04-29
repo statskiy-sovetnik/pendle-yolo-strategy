@@ -64,3 +64,53 @@ export interface LiquidityData {
   minLpOut: string;
   gas?: string;
 }
+
+export interface AssetInfo {
+  id: string;
+  chainId: number;
+  address: string;
+  symbol: string;
+  decimals: number;
+  expiry: string;
+  accentColor: string;
+  price: {
+    usd: number;
+    acc: number;
+  };
+  priceUpdatedAt: string;
+  name: string;
+}
+
+export interface MarketDataPoint {
+  timestamp: string;
+  liquidity: {
+    usd: number;
+    acc: number;
+  };
+  tradingVolume: {
+    usd: number;
+    acc: number;
+  };
+  underlyingInterestApy: number;
+  underlyingRewardApy: number;
+  underlyingApy: number;
+  impliedApy: number;
+  ytFloatingApy: number;
+  swapFeeApy: number;
+  voterApy: number;
+  ptDiscount: number;
+  pendleApy: number;
+  arbApy: number;
+  lpRewardApy: number;
+  aggregatedApy: number;
+  maxBoostedApy: number;
+  estimatedDailyPoolRewards: Array<{
+    asset: AssetInfo;
+    amount: number;
+  }>;
+  totalPt: number;
+  totalSy: number;
+  totalLp: number;
+  totalActiveSupply: number;
+  assetPriceUsd: number;
+}
