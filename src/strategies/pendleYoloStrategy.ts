@@ -72,8 +72,9 @@ export class PendleYoloStrategy {
   
   /**
    * Update market data for all configured markets
+   * @param timestamp Optional timestamp to get historical data for backtesting
    */
-  public async updateMarketData(): Promise<void> {
+  public async updateMarketData(timestamp?: Date): Promise<void> {
     console.log("Updating market data...");
     const tokenAddresses: string[] = [];
     
@@ -85,8 +86,8 @@ export class PendleYoloStrategy {
       tokenAddresses.push(market.marketConfig.underlyingAddress);
     });
     
-    // Fetch token prices
-    const tokenPrices = await getTokenPrices(this.chainId, tokenAddresses);
+    // Fetch token prices (either current or at specified timestamp)
+    const tokenPrices = await getTokenPrices(this.chainId, tokenAddresses, timestamp);
     
     // Update market data for each market
     for (const market of this.markets) {

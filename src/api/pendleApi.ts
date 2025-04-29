@@ -10,6 +10,29 @@ interface TokenPrice {
   price: number;
 }
 
+interface HistoricalPriceQuery {
+  timeFrame?: "hour" | "day" | "week";
+  timestampStart?: Date;
+  timestampEnd?: Date;
+}
+
+interface HistoricalPriceResponse {
+  total: number;
+  currency: string;
+  timeFrame: string;
+  timestamp_start: number;
+  timestamp_end: number;
+  results: string;
+}
+
+interface PriceDataPoint {
+  timestamp: number;
+  high: number;
+  low: number;
+  open: number;
+  close: number;
+}
+
 interface ApyHistoryItem {
   timestamp: number;
   underlyingApy: number;
@@ -72,20 +95,84 @@ async function fetchAPI<T>(endpoint: string, params?: any): Promise<T> {
 
 export async function getTokenPrices(
   chainId: number,
-  addresses: string[]
+  addresses: string[],
+  timestamp?: Date
 ): Promise<Record<string, number>> {
   try {
-    const addressesParam = addresses.join(",");
-    const tokenPrices = await fetchAPI<TokenPrice[]>(
-      `/v1/${chainId}/assets/prices?addresses=${addressesParam}`
-    );
-    
-    const priceMap: Record<string, number> = {};
-    tokenPrices.forEach((item: TokenPrice) => {
-      priceMap[item.address.toLowerCase()] = item.price;
-    });
-    
-    return priceMap;
+    // If no timestamp provided, get current prices
+    if (!timestamp) {
+      const addressesParam = addresses.join(",");
+      const tokenPrices = await fetchAPI<TokenPrice[]>(
+        `/v1/${chainId}/assets/prices?addresses=${addressesParam}`
+      );
+      
+      const priceMap: Record<string, number> = {};
+      tokenPrices.forEach((item: TokenPrice) => {
+        priceMap[item.address.toLowerCase()] = item.price;
+      });
+      
+      return priceMap;
+    } else {
+      // For historical prices, we need to fetch each token individually
+      const priceMap: Record<string, number> = {};
+      
+      // Create a time window around the requested timestamp
+      const timestampStart = new Date(timestamp.getTime() - 12 * 60 * 60 * 1000); // 12h before
+      const timestampEnd = new Date(timestamp.getTime() + 12 * 60 * 60 * 1000);   // 12h after
+      
+      const query: HistoricalPriceQuery = {
+        timeFrame: "hour", // Use hourly granularity for more precise results
+        timestampStart,
+        timestampEnd
+      };
+      
+      // For historical prices, fetch each token price individually
+      for (const address of addresses) {
+        try {
+          // Request historical price data for this token
+          const response = await axios.get<HistoricalPriceResponse>(
+            `${BASE_URL}/v4/${chainId}/prices/${address}/ohlcv`,
+            { params: query }
+          );
+          
+          if (!response.data || !response.data.results) {
+            console.warn(`Invalid historical price response for ${address}`);
+            continue;
+          }
+          
+          // Parse CSV results
+          const csvData = parse(response.data.results, { output: 'objects' });
+          
+          if (csvData.length === 0) {
+            console.warn(`No price data available for ${address} around timestamp ${timestamp.toISOString()}`);
+            continue;
+          }
+          
+          // Find the closest data point to the requested timestamp
+          const targetTimestampMs = timestamp.getTime();
+          let closestDataPoint = csvData[0];
+          let smallestDiff = Math.abs(new Date(csvData[0].time).getTime() - targetTimestampMs);
+          
+          for (let i = 1; i < csvData.length; i++) {
+            const dataPointTime = new Date(csvData[i].time).getTime();
+            const diff = Math.abs(dataPointTime - targetTimestampMs);
+            
+            if (diff < smallestDiff) {
+              smallestDiff = diff;
+              closestDataPoint = csvData[i];
+            }
+          }
+          
+          // Use the closing price from the closest data point
+          priceMap[address.toLowerCase()] = parseFloat(closestDataPoint.close);
+        } catch (error) {
+          console.error(`Error fetching historical price for ${address}:`, error);
+          // Continue with the next token if one fails
+        }
+      }
+      
+      return priceMap;
+    }
   } catch (error) {
     console.error("Error fetching token prices:", error);
     return {};
