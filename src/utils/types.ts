@@ -1,5 +1,3 @@
-import { BigNumber } from "ethers";
-
 export enum StrategyMode {
   PT = "PT",
   YT = "YT",
@@ -21,7 +19,7 @@ export interface MarketData {
 
 export interface Position {
   mode: StrategyMode;
-  amount: BigNumber;
+  amount: bigint;
   tokenAddress: string;
   initialUsdValue: number;
   currentUsdValue: number;
@@ -41,7 +39,7 @@ export interface MarketState {
   marketData: MarketData;
   currentMode: StrategyMode;
   position: Position | null;
-  usdcBalance: BigNumber;
+  usdcBalance: bigint;
   initialUsdValue: number;
 }
 

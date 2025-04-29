@@ -1,5 +1,4 @@
 import axios from "axios";
-import { BigNumber } from "ethers";
 import { LiquidityData, SwapData } from "../utils/types";
 import defaultConfig from "../config";
 
@@ -106,7 +105,7 @@ export async function swapTokens(
   receiverAddress: string,
   tokenIn: string,
   tokenOut: string,
-  amountIn: BigNumber,
+  amountIn: bigint,
   slippage: number = 0.5
 ): Promise<SwapData> {
   return callSDK<SwapData>(`/v1/sdk/${chainId}/markets/${marketAddress}/swap`, {
@@ -124,7 +123,7 @@ export async function addLiquidity(
   marketAddress: string,
   receiverAddress: string,
   tokenIn: string,
-  amountIn: BigNumber,
+  amountIn: bigint,
   slippage: number = 0.5
 ): Promise<LiquidityData> {
   return callSDK<LiquidityData>(`/v1/sdk/${chainId}/markets/${marketAddress}/add-liquidity`, {
@@ -139,7 +138,7 @@ export async function removeLiquidity(
   chainId: number,
   marketAddress: string,
   receiverAddress: string,
-  lpAmount: BigNumber,
+  lpAmount: bigint,
   tokenOut: string,
   slippage: number = 0.5
 ): Promise<LiquidityData> {

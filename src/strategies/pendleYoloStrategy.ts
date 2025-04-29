@@ -1,4 +1,4 @@
-import { BigNumber, ethers } from "ethers";
+import { ethers, TransactionReceipt } from "ethers";
 import { MarketState, StrategyMode, MarketData, Position } from "../utils/types";
 import { 
   getTokenPrices, 
@@ -11,12 +11,13 @@ import {
   calculateDaysToMaturity, 
   calculateFixedYield, 
   formatBigNumber, 
-  parseBigNumber 
+  parseBigNumber, 
+  validateTxReceipt
 } from "../utils/helpers";
 import defaultConfig from "../config";
 
 export class PendleYoloStrategy {
-  private provider: ethers.providers.JsonRpcProvider;
+  private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
   private markets: MarketState[] = [];
   
@@ -24,7 +25,7 @@ export class PendleYoloStrategy {
     private chainId: number = defaultConfig.chainId,
     private config = defaultConfig
   ) {
-    this.provider = new ethers.providers.JsonRpcProvider(this.config.provider);
+    this.provider = new ethers.JsonRpcProvider(this.config.provider);
     this.wallet = new ethers.Wallet(this.config.privateKey, this.provider);
     
     // Initialize markets state from config
@@ -44,7 +45,7 @@ export class PendleYoloStrategy {
       },
       currentMode: StrategyMode.PT, // Default mode
       position: null,
-      usdcBalance: BigNumber.from(0),
+      usdcBalance: 0n,
       initialUsdValue: 0
     }));
   }
@@ -230,7 +231,7 @@ export class PendleYoloStrategy {
           
           position = {
             mode: StrategyMode.PT,
-            amount: BigNumber.from(txData.minTokenOut),
+            amount: BigInt(txData.minTokenOut),
             tokenAddress: marketConfig.ptAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -250,7 +251,7 @@ export class PendleYoloStrategy {
           
           position = {
             mode: StrategyMode.YT,
-            amount: BigNumber.from(txData.minTokenOut),
+            amount: BigInt(txData.minTokenOut),
             tokenAddress: marketConfig.ytAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -269,7 +270,7 @@ export class PendleYoloStrategy {
           
           position = {
             mode: StrategyMode.LP,
-            amount: BigNumber.from(txData.minLpOut),
+            amount: BigInt(txData.minLpOut),
             tokenAddress: marketConfig.marketAddress,
             initialUsdValue: marketConfig.usdAllocation,
             currentUsdValue: marketConfig.usdAllocation
@@ -299,12 +300,16 @@ export class PendleYoloStrategy {
       const tx = await this.wallet.sendTransaction({
         to: txData.target,
         data: txData.callData,
-        value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0),
-        gasLimit: txData.gas ? BigNumber.from(txData.gas) : undefined
+        value: txData.value ? BigInt(txData.value) : 0n,
+        gasLimit: txData.gas ? BigInt(txData.gas) : undefined
       });
       
-      const receipt = await tx.wait();
-      console.log(`Transaction confirmed: ${receipt.transactionHash}`);
+      const receipt = await tx.wait() as TransactionReceipt;
+
+      const isValid = validateTxReceipt(receipt);
+      if (isValid) {
+        console.log(`Transaction confirmed: ${receipt.hash}`);
+      }
       
       // Update market state
       this.markets[marketIndex].position = position;
@@ -375,12 +380,16 @@ export class PendleYoloStrategy {
       const tx = await this.wallet.sendTransaction({
         to: txData.target,
         data: txData.callData,
-        value: txData.value ? BigNumber.from(txData.value) : BigNumber.from(0),
-        gasLimit: txData.gas ? BigNumber.from(txData.gas) : undefined
+        value: txData.value ? BigInt(txData.value) : 0n,
+        gasLimit: txData.gas ? BigInt(txData.gas) : undefined
       });
       
-      const receipt = await tx.wait();
-      console.log(`Exit transaction confirmed: ${receipt.transactionHash}`);
+      const receipt = await tx.wait() as TransactionReceipt;
+      const isValid = validateTxReceipt(receipt);
+
+      if (isValid) {
+        console.log(`Transaction confirmed: ${receipt.hash}`);
+      }
       
       // Reset position
       this.markets[marketIndex].position = null;
